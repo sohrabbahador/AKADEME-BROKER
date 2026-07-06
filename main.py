@@ -8,7 +8,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.filters import Command
 
 # --- CONFIGURATION ---
-TOKEN = "296563931:Noek97TDpcSv15596h1wEG1cVjtdCGJyNg8"
+TOKEN = "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4"
 CARD_NUMBER = "5859831081169756 (بانک تجارت)"
 
 # --- DATABASE LOGIC ---
