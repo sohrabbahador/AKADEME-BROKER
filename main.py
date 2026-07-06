@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import sqlite3
-from aiohttp import web  # اضافه شده برای سرور مجازی رندر
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -11,15 +11,16 @@ from aiogram.filters import Command
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.default import DefaultBotProperties
 
-# --- CONFIGURATION (Safe for GitHub) ---
-TOKEN = os.environ.get("BOT_TOKEN", "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4")
+# --- CONFIGURATION (Direct Token for Bale Fix) ---
+# توکن را مستقیم اینجا گذاشتم تا متغیرهای رندر باعث ارور unauthorized نشوند
+TOKEN = "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4"
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = "https://api.bale.ai/bot"
 
 # تنظیم مسیر دیتابیس برای جلوگیری از حذف داده‌ها در رندر
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
 
-# --- RENDER WEB SERVER (حفظ روشن ماندن ربات در رندر) ---
+# --- RENDER WEB SERVER ---
 async def handle(request):
     return web.Response(text="Bot is running smoothly on Render!")
 
@@ -28,7 +29,6 @@ async def start_render_server():
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    # رندر پورت را روی کادر 10000 یا از متغیر محیطی می‌خواند
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
@@ -69,7 +69,7 @@ class Database:
 
     def get_all_users(self):
         self.cursor.execute("SELECT user_id FROM users")
-        return [row[0] for row in self.fetchall()] if hasattr(self.cursor, 'fetchall') else [row[0] for row in self.cursor.fetchall()]
+        return [row[0] for row in self.cursor.fetchall()]
 
 # مقداردهی اولیه
 db = Database(DB_PATH)
@@ -128,7 +128,7 @@ async def process_name(message: types.Message, state: FSMContext):
 @dp.message(Survey.age_city)
 async def process_age_city(message: types.Message, state: FSMContext):
     await state.update_data(age_city=message.text)
-    await message.answer("سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است？ 👇")
+    await message.answer("سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است؟ 👇")
     await state.set_state(Survey.experience)
 
 @dp.message(Survey.experience)
@@ -256,7 +256,6 @@ async def list_users(message: types.Message):
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-    # اجرای وب‌سرور مجازی رندر به صورت موازی با ربات
     try:
         asyncio.create_task(start_render_server())
     except Exception as e:
@@ -273,7 +272,7 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
     try:
-        print("Bot is starting on BALE server with web-port fix...")
+        print("Bot is starting on BALE server with absolute token fix...")
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
