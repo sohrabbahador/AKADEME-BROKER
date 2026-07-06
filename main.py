@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.default import DefaultBotProperties
 
 # --- CONFIGURATION ---
 TOKEN = "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4"
@@ -68,10 +69,10 @@ def admin_menu():
 # --- HANDLERS ---
 
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext, bot: Bot):
+async def cmd_start(message: types.Message, state: FSMContext):
+    # اولین کسی که استارت بزند ادمین می‌شود
     if db.get_admin() is None:
-
-          db.set_admin(message.from_user.id)
+         db.set_admin(message.from_user.id)
     
     welcome_text = (
         f"سلام {message.from_user.first_name} عزیز! 🌟\n"
@@ -130,6 +131,7 @@ async def process_receipt(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     user_id = message.from_user.id
     
+    # ذخیره در دیتابیس
     db.save_user(user_id, data['name'], data['phone'], data['age_city'], data['experience'], data['job'])
     
     admin_id = db.get_admin()
@@ -152,7 +154,7 @@ async def process_receipt(message: types.Message, state: FSMContext, bot: Bot):
         await bot.send_photo(admin_id, message.photo[-1].file_id)
         await message.answer("رسید شما ارسال شد. منتظر تایید مدیریت باشید... ⏳")
     else:
-        await message.answer("لطفاً عکس رسید را ارسال کنید.")
+        await message.answer("لطفاً عکس رسید را ارسال کنید تا توسط مدیریت بررسی شود.")
     await state.clear()
 
 # --- ADMIN PANEL ---
@@ -198,20 +200,24 @@ async def list_users(message: types.Message):
     users = db.get_all_users()
     await message.answer(f"تعداد کاربران ثبت شده: {len(users)} نفر")
 
-# --- MAIN START ---
-
+# --- MAIN ---
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-    # تنظیمات مخصوص بله
+    # تنظیمات حیاتی برای اتصال به سرور بله
     session = AiohttpSession()
-    bot = Bot(token=TOKEN, session=session)
+    bot = Bot(
+        token=TOKEN.strip(), 
+        session=session,
+        default=DefaultBotProperties(parse_mode="HTML")
+    )
     bot.session.base_url = BALE_API_URL
     
-    # حذف وب‌هوک برای شروع تمیز
+    # پاکسازی وب‌هوک قدیمی
     await bot.delete_webhook(drop_pending_updates=True)
     
     try:
+        print("Bot is starting on BALE server...")
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
