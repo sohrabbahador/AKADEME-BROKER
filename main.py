@@ -6,10 +6,12 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
+from aiogram.client.session.aiohttp import AiohttpSession
 
 # --- CONFIGURATION ---
 TOKEN = "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4"
 CARD_NUMBER = "5859831081169756 (بانک تجارت)"
+BALE_API_URL = "https://api.bale.ai/bot"
 
 # --- DATABASE LOGIC ---
 class Database:
@@ -41,7 +43,6 @@ class Database:
         return [row[0] for row in self.cursor.fetchall()]
 
 db = Database("bot_database.db")
-bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # --- STATES ---
@@ -67,10 +68,10 @@ def admin_menu():
 # --- HANDLERS ---
 
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext):
-    # Set first user as admin if no admin exists
+async def cmd_start(message: types.Message, state: FSMContext, bot: Bot):
     if db.get_admin() is None:
-         db.set_admin(message.from_user.id)
+
+          db.set_admin(message.from_user.id)
     
     welcome_text = (
         f"سلام {message.from_user.first_name} عزیز! 🌟\n"
@@ -125,7 +126,7 @@ async def process_job(message: types.Message, state: FSMContext):
     await state.set_state(Survey.payment_receipt)
 
 @dp.message(Survey.payment_receipt)
-async def process_receipt(message: types.Message, state: FSMContext):
+async def process_receipt(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     user_id = message.from_user.id
     
@@ -146,16 +147,18 @@ async def process_receipt(message: types.Message, state: FSMContext):
         [InlineKeyboardButton(text="❌ رد", callback_data=f"rej_{user_id}")]
     ])
     
-    await bot.send_message(admin_id, admin_text)
+    await bot.send_message(admin_id, admin_text, reply_markup=kb)
     if message.photo:
         await bot.send_photo(admin_id, message.photo[-1].file_id)
         await message.answer("رسید شما ارسال شد. منتظر تایید مدیریت باشید... ⏳")
+    else:
+        await message.answer("لطفاً عکس رسید را ارسال کنید.")
     await state.clear()
 
 # --- ADMIN PANEL ---
 
 @dp.callback_query(F.data.startswith("app_"))
-async def approve_pay(callback: types.CallbackQuery):
+async def approve_pay(callback: types.CallbackQuery, bot: Bot):
     user_id = int(callback.data.split("_")[1])
     msg = ("جناب آقای/سرکار خانم عزیز،\nپیش‌پرداخت شما با موفقیت تایید شد. 🌟\n\n"
            "مشخصات شما در دست بررسی کارشناسان است. به زودی نتیجه پذیرش و لینک وبینار رایگان برای شما ارسال خواهد شد.\n\n"
@@ -165,7 +168,7 @@ async def approve_pay(callback: types.CallbackQuery):
     await callback.message.edit_text(callback.message.text + "\n\n✅ تایید شد.")
 
 @dp.callback_query(F.data.startswith("rej_"))
-async def reject_pay(callback: types.CallbackQuery):
+async def reject_pay(callback: types.CallbackQuery, bot: Bot):
     user_id = int(callback.data.split("_")[1])
     await bot.send_message(user_id, "متأسفیم، پرداخت شما تایید نشد. لطفاً مجدداً رسید را ارسال کنید.")
     await callback.answer("رد شد ❌")
@@ -178,7 +181,7 @@ async def start_bc(message: types.Message, state: FSMContext):
     await state.set_state(Survey.broadcast)
 
 @dp.message(Survey.broadcast)
-async def send_bc(message: types.Message, state: FSMContext):
+async def send_bc(message: types.Message, state: FSMContext, bot: Bot):
     users = db.get_all_users()
     count = 0
     for uid in users:
@@ -195,9 +198,23 @@ async def list_users(message: types.Message):
     users = db.get_all_users()
     await message.answer(f"تعداد کاربران ثبت شده: {len(users)} نفر")
 
+# --- MAIN START ---
+
 async def main():
     logging.basicConfig(level=logging.INFO)
-    await dp.start_polling(bot)
+    
+    # تنظیمات مخصوص بله
+    session = AiohttpSession()
+    bot = Bot(token=TOKEN, session=session)
+    bot.session.base_url = BALE_API_URL
+    
+    # حذف وب‌هوک برای شروع تمیز
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
