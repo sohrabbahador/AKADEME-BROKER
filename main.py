@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import sqlite3
+from aiohttp import web  # اضافه شده برای سرور مجازی رندر
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -11,13 +12,27 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.default import DefaultBotProperties
 
 # --- CONFIGURATION (Safe for GitHub) ---
-# مقادیر پیش‌فرض قرار داده شده تا اگر در محیط محلی تست می‌کنید کار کند.
 TOKEN = os.environ.get("BOT_TOKEN", "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4")
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = "https://api.bale.ai/bot"
 
 # تنظیم مسیر دیتابیس برای جلوگیری از حذف داده‌ها در رندر
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
+
+# --- RENDER WEB SERVER (حفظ روشن ماندن ربات در رندر) ---
+async def handle(request):
+    return web.Response(text="Bot is running smoothly on Render!")
+
+async def start_render_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    # رندر پورت را روی کادر 10000 یا از متغیر محیطی می‌خواند
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"Render dummy server started on port {port}")
 
 # --- DATABASE LOGIC ---
 class Database:
@@ -54,7 +69,7 @@ class Database:
 
     def get_all_users(self):
         self.cursor.execute("SELECT user_id FROM users")
-        return [row[0] for row in self.cursor.fetchall()]
+        return [row[0] for row in self.fetchall()] if hasattr(self.cursor, 'fetchall') else [row[0] for row in self.cursor.fetchall()]
 
 # مقداردهی اولیه
 db = Database(DB_PATH)
@@ -84,11 +99,9 @@ def admin_menu():
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
-    # اولین کسی که استارت بزند ادمین می‌شود
     if db.get_admin() is None:
         db.set_admin(message.from_user.id)
     
-    # تشخیص منو بر اساس ادمین بودن یا کاربر بودن
     is_admin = message.from_user.id == db.get_admin()
     current_markup = admin_menu() if is_admin else main_menu()
     
@@ -115,7 +128,7 @@ async def process_name(message: types.Message, state: FSMContext):
 @dp.message(Survey.age_city)
 async def process_age_city(message: types.Message, state: FSMContext):
     await state.update_data(age_city=message.text)
-    await message.answer("سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است؟ 👇")
+    await message.answer("سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است？ 👇")
     await state.set_state(Survey.experience)
 
 @dp.message(Survey.experience)
@@ -149,7 +162,6 @@ async def process_receipt(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     user_id = message.from_user.id
     
-    # ذخیره در دیتابیس
     db.save_user(
         user_id, 
         data.get('name'), 
@@ -227,7 +239,7 @@ async def send_bc(message: types.Message, state: FSMContext, bot: Bot):
         try:
             await bot.send_message(uid, message.text)
             count += 1
-            await asyncio.sleep(0.05) # جلوگیری از فلود شدن ربات در بله
+            await asyncio.sleep(0.05)
         except: 
             pass
     await message.answer(f"پیام شما برای {count} کاربر ارسال شد. ✅")
@@ -244,6 +256,12 @@ async def list_users(message: types.Message):
 async def main():
     logging.basicConfig(level=logging.INFO)
     
+    # اجرای وب‌سرور مجازی رندر به صورت موازی با ربات
+    try:
+        asyncio.create_task(start_render_server())
+    except Exception as e:
+        print(f"Error starting web server: {e}")
+        
     session = AiohttpSession()
     bot = Bot(
         token=TOKEN.strip(), 
@@ -255,7 +273,7 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
     try:
-        print("Bot is starting on BALE server...")
+        print("Bot is starting on BALE server with web-port fix...")
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
