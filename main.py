@@ -10,7 +10,7 @@ TOKEN = os.environ.get("BOT_TOKEN", "1770530298:qdkjoE0lmqmEyOFSLdorAbr5SU-bUXyC
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 
 # 💡 ترفند اصلی: استفاده از ریورس پروکسی بومی برای دور زدن مسدودیت آی‌پي خارج
-BALE_API_URL = f"https://bale.tapi.ir/bot{TOKEN}"
+BALE_API_URL = f"https://tapi.bale.ai/bot{TOKEN}"
 
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
 
