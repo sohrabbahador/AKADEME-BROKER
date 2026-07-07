@@ -6,7 +6,8 @@ import aiohttp
 from aiohttp import web
 
 # --- CONFIGURATION ---
-TOKEN = "296563931:ZIhjuPVuDCxzIalxOC6Bm6JWRqktZGQrpUA"
+# حالا کد مستقیماً توکن و شماره کارت رو از تنظیمات رندر می‌خونه
+TOKEN = os.environ.get("BOT_TOKEN", "296563931:ZIhjuPVuDCxzIalxOC6Bm6JWRqktZGQrpUA").strip()
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = f"https://api.bale.ai/bot{TOKEN}"
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
@@ -211,13 +212,12 @@ async def handle_update(update, session):
 
 # --- RENDER WEB SERVER ---
 async def handle(request):
-    return web.Response(text="Bot is running completely fine!")
+    return web.Response(text="Bot web server is up and running!")
 
 # --- MAIN POLLING LOOP ---
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-    # راه اندازی وب سرور رندر برای هماهنگی با پورت سرور
     app = web.Application()
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
@@ -225,12 +225,11 @@ async def main():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"Render Web Server active on port {port}")
+    print(f"Web server successfully bound to port {port}")
 
-    # دریافت مستقیم پیام‌ها از سرور بله بدون ارسال دستورات ناسازگار
     async with aiohttp.ClientSession() as session:
         offset = 0
-        print("Direct polling started on Bale Server...")
+        print("Connecting to Bale server with new verified token...")
         while True:
             try:
                 url = f"{BALE_API_URL}/getUpdates?offset={offset}&timeout=20"
@@ -241,8 +240,11 @@ async def main():
                             for update in res_json.get("result", []):
                                 await handle_update(update, session)
                                 offset = update["update_id"] + 1
+                    elif resp.status == 401:
+                        print("CRITICAL: Token is unauthorized! Please check your Render Environment Variables.")
+                        await asyncio.sleep(10)
             except Exception as e:
-                print(f"Polling warning: {e}")
+                print(f"Network notice: {e}")
             await asyncio.sleep(1)
 
 if __name__ == "__main__":
