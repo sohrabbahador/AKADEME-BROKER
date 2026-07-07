@@ -9,7 +9,7 @@ from aiohttp import web
 TOKEN = os.environ.get("BOT_TOKEN", "1770530298:qdkjoE0lmqmEyOFSLdorAbr5SU-bUXyCNiY").strip()
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 
-# 💡 ترفند اصلی: استفاده از ریورس پروکسی بومی برای دور زدن مسدودیت آی‌پي خارج
+# 💡 استفاده از ریورس پروکسی بومی برای دور زدن مسدودیت آی‌پي خارج
 BALE_API_URL = f"https://tapi.bale.ai/bot{TOKEN}"
 
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
@@ -79,6 +79,12 @@ def get_main_menu():
 def get_admin_menu():
     return {"keyboard": [[{"text": "📢 ارسال پیام گروهی"}], [{"text": "👥 لیست کاربران"}]], "resize_keyboard": True}
 
+def get_contact_keyboard():
+    return {"keyboard": [[{"text": "📱 ارسال شماره تماس", "request_contact": True}]], "resize_keyboard": True, "one_time_keyboard": True}
+
+def get_confirm_keyboard():
+    return {"keyboard": [[{"text": "✅ بله، درست است"}, {"text": "❌ خیر، ویرایش شود"}]], "resize_keyboard": True}
+
 def get_inline_approval(user_id):
     return {
         "inline_keyboard": [
@@ -106,7 +112,7 @@ async def handle_update(update, session):
                 f"سلام {message['from'].get('first_name', 'عزیز')} عزیز! 🌟\n"
                 f"به تیم آموزش و جذب 'سهراب بهادر' خوش آمدید.\n\n"
                 f"ما اینجا هستیم تا شما را در مسیر موفقیت در دنیای بروکرینگ راهنمایی کنیم.\n\n"
-                f"برای شروع مراحل پذیرش، روی دکمه زیر کلیک کنید 👇"
+                f"برای شروع مراحل پذیرش و ثبت درخواست، روی دکمه زیر کلیک کنید 👇"
             )
             await send_message(session, chat_id, welcome, current_menu)
             return
@@ -114,53 +120,87 @@ async def handle_update(update, session):
         state = user_states.get(chat_id)
 
         if text == "📋 ثبت درخواست":
-            await send_message(session, chat_id, "لطفاً نام و نام خانوادگی خود را وارد کنید: 👇")
+            await send_message(session, chat_id, "خوشحالیم که با ما همراه شدید. 🚀\nلطفاً نام و نام خانوادگی کامل خود را وارد کنید: 👇")
             user_states[chat_id] = "W_NAME"
             user_data[chat_id] = {}
             return
             
         elif text == "📢 ارسال پیام گروهی" and is_admin:
-            await send_message(session, chat_id, "پیام خود را بفرستید تا برای همه ارسال شود: 👇")
+            await send_message(session, chat_id, "پیام خود را بفرستید تا برای همه کاربران ارسال شود: 👇")
             user_states[chat_id] = "W_BROADCAST"
             return
             
         elif text == "👥 لیست کاربران" and is_admin:
             users = db.get_all_users()
-            await send_message(session, chat_id, f"تعداد کاربران ثبت شده: {len(users)} نفر")
+            await send_message(session, chat_id, f"تعداد کل کاربران ثبت شده در دیتابیس: {len(users)} نفر")
             return
 
-        # FSM
+        # --- FSM Registration Flow ---
         if state == "W_NAME":
             user_data[chat_id]["name"] = text
-            await send_message(session, chat_id, "لطفاً سن و شهر محل سکونت خود را بنویسید: 👇")
+            await send_message(session, chat_id, "سپاس‌وارم. حالا لطفاً سن و شهر محل سکونت خود را بنویسید:\n(مثال: ۲۵ سال - تهران) 👇")
             user_states[chat_id] = "W_CITY"
+            
         elif state == "W_CITY":
             user_data[chat_id]["city"] = text
-            await send_message(session, chat_id, "سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است؟ 👇")
+            await send_message(session, chat_id, "ممنون. سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است؟ 👇")
             user_states[chat_id] = "W_EXP"
+            
         elif state == "W_EXP":
             user_data[chat_id]["exp"] = text
-            await send_message(session, chat_id, "لطفاً شماره تماس خود را وارد کنید: 👇")
+            await send_message(session, chat_id, "برای تکمیل پرونده، لطفاً شماره تماس خود را ارسال کنید: 👇", get_contact_keyboard())
             user_states[chat_id] = "W_PHONE"
+            
         elif state == "W_PHONE":
-            user_data[chat_id]["phone"] = text
-            await send_message(session, chat_id, "در حال حاضر مشغول چه کاری هستید؟ (شغل فعلی) 👇")
+            phone = ""
+            if "contact" in message:
+                phone = message["contact"].get("phone_number", "")
+            else:
+                phone = text
+            user_data[chat_id]["phone"] = phone
+            await send_message(session, chat_id, "ممنون. در حال حاضر مشغول چه کاری هستید؟ (شغل فعلی خود را بنویسید) 👇")
             user_states[chat_id] = "W_JOB"
+            
         elif state == "W_JOB":
             user_data[chat_id]["job"] = text
-            payment_text = (
-                f"ممنون {user_data[chat_id].get('name')} عزیز. مشخصات شما ثبت شد. ✅\n\n"
-                f"برای فعال‌سازی حساب، مبلغ **۲ میلیون تومان** پیش‌پرداخت را به شماره کارت زیر واریز کنید:\n\n"
-                f"💳 `{CARD_NUMBER}`\n\n"
-                f"پس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید."
+            data = user_data[chat_id]
+            summary = (
+                f"📌 **خلاصه اطلاعات شما:**\n\n"
+                f"👤 نام: {data.get('name')}\n"
+                f"📍 شهر و سن: {data.get('city')}\n"
+                f"⏳ سابقه: {data.get('exp')}\n"
+                f"📞 تلفن: {data.get('phone')}\n"
+                f"💼 شغل: {data.get('job')}\n\n"
+                f"آیا اطلاعات بالا صحیح است؟"
             )
-            await send_message(session, chat_id, payment_text)
-            user_states[chat_id] = "W_RECEIPT"
+            await send_message(session, chat_id, summary, get_confirm_keyboard())
+            user_states[chat_id] = "W_CONFIRM"
+            
+        elif state == "W_CONFIRM":
+            if text == "✅ بله، درست است":
+                payment_text = (
+                    f"ممنون {user_data[chat_id].get('name')} عزیز. مشخصات شما با موفقیت ثبت شد. ✅\n\n"
+                    f"برای فعال‌سازی حساب و ورود به دوره، مبلغ **۲ میلیون تومان** پیش‌پرداخت را به شماره کارت زیر واریز کنید:\n\n"
+                    f"💳 `{CARD_NUMBER}`\n\n"
+                    f"پس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید."
+                )
+                await send_message(session, chat_id, payment_text)
+                user_states[chat_id] = "W_RECEIPT"
+            elif text == "❌ خیر، ویرایش شود":
+                await send_message(session, chat_id, "متوجه شدم. لطفاً دوباره از ابتدا روی دکمه ثبت درخواست کلیک کنید تا اطلاعات را اصلاح کنید. 👇", get_main_menu())
+                user_states[chat_id] = None
+            else:
+                await send_message(session, chat_id, "لطفاً از دکمه‌های بله یا خیر استفاده کنید.")
+
         elif state == "W_RECEIPT":
             file_id = None
             if "photo" in message:
                 file_id = message["photo"][-1]["file_id"]
             
+            if not file_id:
+                await send_message(session, chat_id, "لطفاً حتماً عکس رسید را ارسال کنید تا مدیریت بتواند تایید کند. 👇")
+                return
+
             data = user_data.get(chat_id, {})
             db.save_user(chat_id, data.get("name"), data.get("phone"), data.get("city"), data.get("exp"), data.get("job"))
             
@@ -177,7 +217,7 @@ async def handle_update(update, session):
                 await send_message(session, admin_id, admin_text, get_inline_approval(chat_id))
                 if file_id:
                     await send_photo(session, admin_id, file_id)
-                await send_message(session, chat_id, "رسید شما ارسال شد. منتظر تایید مدیریت باشید... ⏳")
+                await send_message(session, chat_id, "رسید شما با موفقیت ارسال شد. منتظر تایید مدیریت باشید... ⏳")
                 user_states[chat_id] = None
                 
         elif state == "W_BROADCAST" and is_admin:
@@ -229,13 +269,4 @@ async def main():
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         res_json = await resp.json()
-                        if res_json.get("ok"):
-                            for update in res_json.get("result", []):
-                                await handle_update(update, session)
-                                offset = update["update_id"] + 1
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+                        if res
