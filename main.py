@@ -269,4 +269,14 @@ async def main():
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         res_json = await resp.json()
-                        if res
+                        if res_json.get("ok"):
+                            for update in res_json.get("result", []):
+                                await handle_update(update, session)
+                                offset = update["update_id"] + 1
+            except Exception as e:
+                print(f"Polling error: {e}")
+            await asyncio.sleep(1)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
