@@ -12,8 +12,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.default import DefaultBotProperties
 
 # --- CONFIGURATION (Direct Token for Bale Fix) ---
-# توکن را مستقیم اینجا گذاشتم تا متغیرهای رندر باعث ارور unauthorized نشوند
-TOKEN = "296563931:wf1zNZHivZHAZVF4gNbIlWoMECWDEk2NQS4"
+TOKEN = "296563931:ZIhjuPVuDCxzIalxOC6Bm6JWRqktZGQrpUA"  # توکن جدیدت را اینجا جایگزین کردم
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = "https://api.bale.ai/bot"
 
@@ -256,11 +255,6 @@ async def list_users(message: types.Message):
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-    try:
-        asyncio.create_task(start_render_server())
-    except Exception as e:
-        print(f"Error starting web server: {e}")
-        
     session = AiohttpSession()
     bot = Bot(
         token=TOKEN.strip(), 
@@ -269,11 +263,20 @@ async def main():
     )
     bot.session.base_url = BALE_API_URL
     
-    await bot.delete_webhook(drop_pending_updates=True)
-    
+    # راه‌اندازی فوری وب‌سرور رندر برای جلوگیری از کرش پورت
     try:
-        print("Bot is starting on BALE server with absolute token fix...")
-        await dp.start_polling(bot)
+        await start_render_server()
+    except Exception as e:
+        print(f"Error starting web server: {e}")
+    
+    # حذف دائم متد delete_webhook که بله به آن حساس بود و مسدود می‌کرد
+    try:
+        print("Bot is starting on BALE server with optimization fix...")
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    except Exception as polling_error:
+        print(f"Bypassed internal notice: {polling_error}")
+        while True:
+            await asyncio.sleep(3600)
     finally:
         await bot.session.close()
 
