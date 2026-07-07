@@ -6,8 +6,8 @@ import aiohttp
 from aiohttp import web
 
 # --- CONFIGURATION ---
-# حالا کد مستقیماً توکن و شماره کارت رو از تنظیمات رندر می‌خونه
-TOKEN = os.environ.get("BOT_TOKEN", "296563931:ZIhjuPVuDCxzIalxOC6Bm6JWRqktZGQrpUA").strip()
+# توکن جدید شما مستقیماً اینجا ست شد تا هیچ تداخلی پیش نیاد
+TOKEN = os.environ.get("BOT_TOKEN", "1770530298:qdkjoE0lmqmEyOFSLdorAbr5SU-bUXyCNiY").strip()
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = f"https://api.bale.ai/bot{TOKEN}"
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
@@ -38,7 +38,7 @@ class Database:
         return int(result[0]) if result else None
 
     def save_user(self, user_id, name, phone, city, exp, job):
-        self.cursor.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)", (user_id, name, phone, city, exp, job))
+        self.cursor.execute("INSERT OR REPLACE VALUES (?, ?, ?, ?, ?, ?)", (user_id, name, phone, city, exp, job))
         self.conn.commit()
 
     def get_all_users(self):
@@ -105,7 +105,7 @@ async def handle_update(update, session):
                 f"سلام {message['from'].get('first_name', 'عزیز')} عزیز! 🌟\n"
                 f"به تیم آموزش و جذب 'سهراب بهادر' خوش آمدید.\n\n"
                 f"ما اینجا هستیم تا شما را در مسیر موفقیت در دنیای بروکرینگ راهنمایی کنیم.\n\n"
-                f"🎁 **وبینار رایگان:** برای آشنایی با متد ما و شنیدن پیش‌گفتار آموزش، می‌توانید در وبینار رایگان ما شرکت کنید. (لینک پس از ثبت اولیه ارسال می‌شود).\n\n"
+                f"🎁 **وبینار رایگان:** برای آشنایی با متد ما و شنیدن پیش‌گفتار آموزش، می‌توانید در وبینار رایگان ما شرکت کنید.\n\n"
                 f"برای شروع مراحل پذیرش، روی دکمه زیر کلیک کنید 👇"
             )
             await send_message(session, chat_id, welcome, current_menu)
@@ -121,7 +121,7 @@ async def handle_update(update, session):
             return
             
         elif text == "📢 ارسال پیام گروهی" and is_admin:
-            await send_message(session, chat_id, "پیام خود (مثلاً لینک وبینار) را بفرستید تا برای همه ارسال شود: 👇")
+            await send_message(session, chat_id, "پیام خود را بفرستید تا برای همه ارسال شود: 👇")
             user_states[chat_id] = "W_BROADCAST"
             return
             
@@ -151,9 +151,9 @@ async def handle_update(update, session):
             user_data[chat_id]["job"] = text
             payment_text = (
                 f"ممنون {user_data[chat_id].get('name')} عزیز. مشخصات شما ثبت شد. ✅\n\n"
-                f"برای فعال‌سازی حساب و دریافت دسترسی به وبینار رایگان، مبلغ **۲ میلیون تومان** پیش‌پرداخت را به شماره کارت زیر واریز کنید:\n\n"
+                f"برای فعال‌سازی حساب، مبلغ **۲ میلیون تومان** پیش‌پردخت را به شماره کارت زیر واریز کنید:\n\n"
                 f"💳 `{CARD_NUMBER}`\n\n"
-                f"پس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید تا توسط مدیریت تایید شود."
+                f"پس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید."
             )
             await send_message(session, chat_id, payment_text)
             user_states[chat_id] = "W_RECEIPT"
@@ -180,8 +180,6 @@ async def handle_update(update, session):
                     await send_photo(session, admin_id, file_id)
                 await send_message(session, chat_id, "رسید شما ارسال شد. منتظر تایید مدیریت باشید... ⏳")
                 user_states[chat_id] = None
-            else:
-                await send_message(session, chat_id, "خطا: ادمین مشخص نیست.")
                 
         elif state == "W_BROADCAST" and is_admin:
             users = db.get_all_users()
@@ -200,9 +198,7 @@ async def handle_update(update, session):
         
         if data.startswith("app_"):
             target_user = int(data.split("_")[1])
-            msg = ("جناب آقای/سرکار خانم عزیز،\nپیش‌پرداخت شما با موفقیت تایید شد. 🌟\n\n"
-                   "مشخصات شما در دست بررسی کارشناسان است. به زودی نتیجه پذیرش و لینک وبینار رایگان برای شما ارسال خواهد شد.\n\n"
-                   "سپاس از اعتماد شما.")
+            msg = "جناب آقای/سرکار خانم عزیز،\nپیش‌پرداخت شما با موفقیت تایید شد. 🌟\n\nبه زودی لینک وبینار رایگان برای شما ارسال خواهد شد."
             await send_message(session, target_user, msg)
             await send_message(session, from_id, f"✅ کاربر {target_user} تایید شد.")
         elif data.startswith("rej_"):
@@ -212,12 +208,11 @@ async def handle_update(update, session):
 
 # --- RENDER WEB SERVER ---
 async def handle(request):
-    return web.Response(text="Bot web server is up and running!")
+    return web.Response(text="Bot is live!")
 
 # --- MAIN POLLING LOOP ---
 async def main():
     logging.basicConfig(level=logging.INFO)
-    
     app = web.Application()
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
@@ -225,11 +220,9 @@ async def main():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"Web server successfully bound to port {port}")
 
     async with aiohttp.ClientSession() as session:
         offset = 0
-        print("Connecting to Bale server with new verified token...")
         while True:
             try:
                 url = f"{BALE_API_URL}/getUpdates?offset={offset}&timeout=20"
@@ -240,11 +233,8 @@ async def main():
                             for update in res_json.get("result", []):
                                 await handle_update(update, session)
                                 offset = update["update_id"] + 1
-                    elif resp.status == 401:
-                        print("CRITICAL: Token is unauthorized! Please check your Render Environment Variables.")
-                        await asyncio.sleep(10)
-            except Exception as e:
-                print(f"Network notice: {e}")
+            except Exception:
+                pass
             await asyncio.sleep(1)
 
 if __name__ == "__main__":
