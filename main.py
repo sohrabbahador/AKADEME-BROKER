@@ -110,8 +110,8 @@ async def handle_update(update, session):
             user_states[chat_id] = None
             welcome = (
                 f"سلام {message['from'].get('first_name', 'عزیز')} عزیز! 🌟\n"
-                f"به تیم آموزش و جذب 'سهراب بهادر' خوش آمدید.\n\n"
-                f"ما اینجا هستیم تا شما را در مسیر موفقیت در دنیای بروکرینگ راهنمایی کنیم.\n\n"
+                f"به آکادمی املاک «حرفه‌ای شو» خوش آمدید.\n\n"
+                f"ما اینجا هستیم تا شما را در دنیای بروکری املاک رشد بدیم.\n\n"
                 f"برای شروع مراحل پذیرش و ثبت درخواست، روی دکمه زیر کلیک کنید 👇"
             )
             await send_message(session, chat_id, welcome, current_menu)
@@ -138,17 +138,17 @@ async def handle_update(update, session):
         # --- FSM Registration Flow ---
         if state == "W_NAME":
             user_data[chat_id]["name"] = text
-            await send_message(session, chat_id, "سپاس‌وارم. حالا لطفاً سن و شهر محل سکونت خود را بنویسید:\n(مثال: ۲۵ سال - تهران) 👇")
+            await send_message(session, chat_id, " لطفاً سن و شهر محل سکونت خود را بنویسید:\n(مانند: ۳۰ سال - تهران) 👇")
             user_states[chat_id] = "W_CITY"
             
         elif state == "W_CITY":
             user_data[chat_id]["city"] = text
-            await send_message(session, chat_id, "ممنون. سابقه فعالیت شما در زمینه بروکرینگ یا املاک چقدر است؟ 👇")
+            await send_message(session, chat_id, "سابقه فعالیت شما در املاک داشته‌اید؟ 👇")
             user_states[chat_id] = "W_EXP"
             
         elif state == "W_EXP":
             user_data[chat_id]["exp"] = text
-            await send_message(session, chat_id, "برای تکمیل پرونده، لطفاً شماره تماس خود را ارسال کنید: 👇", get_contact_keyboard())
+            await send_message(session, chat_id, "لطفاً شماره تماس خود را ارسال کنید: 👇", get_contact_keyboard())
             user_states[chat_id] = "W_PHONE"
             
         elif state == "W_PHONE":
