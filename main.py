@@ -6,10 +6,12 @@ import aiohttp
 from aiohttp import web
 
 # --- CONFIGURATION ---
-# توکن جدید شما مستقیماً اینجا ست شد تا هیچ تداخلی پیش نیاد
 TOKEN = os.environ.get("BOT_TOKEN", "1770530298:qdkjoE0lmqmEyOFSLdorAbr5SU-bUXyCNiY").strip()
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
-BALE_API_URL = f"https://api.bale.ai/bot{TOKEN}"
+
+# 💡 ترفند اصلی: استفاده از ریورس پروکسی بومی برای دور زدن مسدودیت آی‌پي خارج
+BALE_API_URL = f"https://bale.tapi.ir/bot{TOKEN}"
+
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
 
 # --- DATABASE LOGIC ---
@@ -38,7 +40,7 @@ class Database:
         return int(result[0]) if result else None
 
     def save_user(self, user_id, name, phone, city, exp, job):
-        self.cursor.execute("INSERT OR REPLACE VALUES (?, ?, ?, ?, ?, ?)", (user_id, name, phone, city, exp, job))
+        self.cursor.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)", (user_id, name, phone, city, exp, job))
         self.conn.commit()
 
     def get_all_users(self):
@@ -98,14 +100,12 @@ async def handle_update(update, session):
         is_admin = (chat_id == db.get_admin())
         current_menu = get_admin_menu() if is_admin else get_main_menu()
 
-        # Command /start
         if text == "/start":
             user_states[chat_id] = None
             welcome = (
                 f"سلام {message['from'].get('first_name', 'عزیز')} عزیز! 🌟\n"
                 f"به تیم آموزش و جذب 'سهراب بهادر' خوش آمدید.\n\n"
                 f"ما اینجا هستیم تا شما را در مسیر موفقیت در دنیای بروکرینگ راهنمایی کنیم.\n\n"
-                f"🎁 **وبینار رایگان:** برای آشنایی با متد ما و شنیدن پیش‌گفتار آموزش، می‌توانید در وبینار رایگان ما شرکت کنید.\n\n"
                 f"برای شروع مراحل پذیرش، روی دکمه زیر کلیک کنید 👇"
             )
             await send_message(session, chat_id, welcome, current_menu)
@@ -113,7 +113,6 @@ async def handle_update(update, session):
 
         state = user_states.get(chat_id)
 
-        # Main Menu Clicks
         if text == "📋 ثبت درخواست":
             await send_message(session, chat_id, "لطفاً نام و نام خانوادگی خود را وارد کنید: 👇")
             user_states[chat_id] = "W_NAME"
@@ -130,7 +129,7 @@ async def handle_update(update, session):
             await send_message(session, chat_id, f"تعداد کاربران ثبت شده: {len(users)} نفر")
             return
 
-        # FSM Steps
+        # FSM
         if state == "W_NAME":
             user_data[chat_id]["name"] = text
             await send_message(session, chat_id, "لطفاً سن و شهر محل سکونت خود را بنویسید: 👇")
@@ -151,7 +150,7 @@ async def handle_update(update, session):
             user_data[chat_id]["job"] = text
             payment_text = (
                 f"ممنون {user_data[chat_id].get('name')} عزیز. مشخصات شما ثبت شد. ✅\n\n"
-                f"برای فعال‌سازی حساب، مبلغ **۲ میلیون تومان** پیش‌پردخت را به شماره کارت زیر واریز کنید:\n\n"
+                f"برای فعال‌سازی حساب، مبلغ **۲ میلیون تومان** پیش‌پرداخت را به شماره کارت زیر واریز کنید:\n\n"
                 f"💳 `{CARD_NUMBER}`\n\n"
                 f"پس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید."
             )
@@ -208,7 +207,7 @@ async def handle_update(update, session):
 
 # --- RENDER WEB SERVER ---
 async def handle(request):
-    return web.Response(text="Bot is live!")
+    return web.Response(text="Bot is perfectly connected via Proxy!")
 
 # --- MAIN POLLING LOOP ---
 async def main():
@@ -223,6 +222,7 @@ async def main():
 
     async with aiohttp.ClientSession() as session:
         offset = 0
+        print("Polling through safe API proxy...")
         while True:
             try:
                 url = f"{BALE_API_URL}/getUpdates?offset={offset}&timeout=20"
