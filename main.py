@@ -143,9 +143,8 @@ async def handle_update(update, session):
             
         elif state == "W_CITY":
             user_data[chat_id]["city"] = text
-            await send_message(session, chat_id, "سابقه فعالیت شما در املاک داشته‌اید؟ 👇")
+            await send_message(session, chat_id, "سابقه فعالیت در املاک داشته‌اید؟:\n(خیر / بله) 👇")
             user_states[chat_id] = "W_EXP"
-            
         elif state == "W_EXP":
             user_data[chat_id]["exp"] = text
             await send_message(session, chat_id, "لطفاً شماره تماس خود را ارسال کنید: 👇", get_contact_keyboard())
