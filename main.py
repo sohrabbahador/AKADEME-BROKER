@@ -12,6 +12,7 @@ TOKEN = os.environ.get(
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = f"https://tapi.bale.ai/bot{TOKEN}"
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
+ADMIN_ID = 160513400  # شناسه ثابت مدیریت
 
 
 # --- DATABASE LOGIC ---
@@ -26,24 +27,9 @@ class Database:
         self.cursor.execute(
             "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT, phone TEXT, city TEXT, experience TEXT, job TEXT)"
         )
-        self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)"
-        )
         self.conn.commit()
 
-    def set_admin(self, admin_id):
-        self.cursor.execute(
-            "INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_id', ?)",
-            (str(admin_id),),
-        )
-        self.conn.commit()
-
-    def get_admin(self):
-        self.cursor.execute("SELECT value FROM settings WHERE key = 'admin_id'")
-        result = self.cursor.fetchone()
-        return int(result[0]) if result else None
-
-    def save_user(self, user_id, name, phone, city, exp, job):
+    def save_user(self, user_id, name, phone, city, job, exp="حذف شده"):
         self.cursor.execute(
             "INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)",
             (user_id, name, phone, city, exp, job),
@@ -85,12 +71,11 @@ async def send_photo(session, chat_id, file_id):
 
 
 # --- TIMED LEAD DELAY FUNCTION ---
-async def send_abandoned_lead_alert(session, chat_id, delay=900):
-    """اگر کاربر بعد از فرستادن شماره فرم را ادامه نداد، بعد از ۱۵ دقیقه (۹۰۰ ثانیه) به ادمین پیام می‌دهد"""
+async def send_abandoned_lead_alert(session, chat_id, delay=300):
+    """اگر کاربر فرم را رها کرد، بعد از ۵ دقیقه به ادمین خبر می‌دهد"""
     try:
         await asyncio.sleep(delay)
-        admin_id = db.get_admin()
-        if admin_id and chat_id in user_data:
+        if chat_id in user_data:
             data = user_data[chat_id]
             # اگر فرآیند پرداخت شروع نشده باشد یعنی کاربر فرم را رها کرده است
             if user_states.get(chat_id) not in ["W_RECEIPT", None]:
@@ -99,11 +84,12 @@ async def send_abandoned_lead_alert(session, chat_id, delay=900):
                     f"👤 نام: {data.get('name', 'نامشخص')}\n"
                     f"📍 شهر و سن: {data.get('city', 'نامشخص')}\n"
                     f"📞 شماره: {data.get('phone', 'نامشخص')}\n"
-                    f"🛑 کاربر فرآیند ثبت‌نام را در این مرحله رها کرد."
+                    f"💼 شغل فعلی: {data.get('job', 'نامشخص')}\n\n"
+                    f"🛑 کاربر فرآیند ثبت‌نام را رها کرد."
                 )
-                await send_message(session, admin_id, abandoned_info)
+                await send_message(session, ADMIN_ID, abandoned_info)
     except asyncio.CancelledError:
-        pass  # اگر کاربر ادامه دهد، تایمر کنسل می‌شود و این تابع کاری انجام نمی‌دهد
+        pass
 
 
 # --- KEYBOARDS ---
@@ -145,13 +131,9 @@ async def handle_update(update, session):
         chat_id = message["chat"]["id"]
         text = message.get("text", "")
 
-        if db.get_admin() is None:
-            db.set_admin(chat_id)
-
-        is_admin = chat_id == db.get_admin()
+        is_admin = chat_id == ADMIN_ID
 
         if text == "/start":
-            # اگر کاربر از قبل تایمری داشت، لغو شود
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
             user_states[chat_id] = None
@@ -213,11 +195,11 @@ async def handle_update(update, session):
             )
             user_data.setdefault(chat_id, {})["phone"] = phone
 
-            # 🌟 شروع تایمر پس‌زمینه برای لید رها شده (مثلاً ۱۵ دقیقه = ۹۰۰ ثانیه)
+            # 🌟 شروع تایمر ۵ دقیقه‌ای پس‌زمینه
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
             user_timers[chat_id] = asyncio.create_task(
-                send_abandoned_lead_alert(session, chat_id, delay=900)
+                send_abandoned_lead_alert(session, chat_id, delay=300)
             )
 
             await send_message(
@@ -229,44 +211,33 @@ async def handle_update(update, session):
 
         elif state == "W_JOB":
             user_data.setdefault(chat_id, {})["job"] = text
-            await send_message(
-                session,
-                chat_id,
-                "میزان تجربه کاری شما چقدر است؟ (مثلاً ۲ سال) 👇",
-            )
-            user_states[chat_id] = "W_EXP"
 
-        elif state == "W_EXP":
-            exp = text
-            user_data.setdefault(chat_id, {})["exp"] = exp
-
-            # 🌟 کاربر فرم را تا انتها پر کرد؛ پس تایمر لید رها شده لغو می‌شود
+            # 🌟 کاربر تمام مراحل را پر کرد؛ پس تایمر لید رها شده لغو می‌شود
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
                 del user_timers[chat_id]
 
+            # 🌟 ذخیره مشخصات کامل در دیتابیس
             db.save_user(
                 chat_id,
                 user_data[chat_id].get("name"),
                 user_data[chat_id].get("phone"),
                 user_data[chat_id].get("city"),
-                exp,
-                user_data[chat_id].get("job"),
+                text,
             )
 
-            admin_id = db.get_admin()
-            if admin_id:
-                full_info = (
-                    f"✅ **تکمیل مشخصات کاربر (لید کامل):**\n\n"
-                    f"👤 نام: {user_data[chat_id].get('name')}\n"
-                    f"📍 شهر و سن: {user_data[chat_id].get('city')}\n"
-                    f"📞 شماره: {user_data[chat_id].get('phone')}\n"
-                    f"💼 شغل: {user_data[chat_id].get('job')}\n"
-                    f"⏳ تجربه: {exp}\n"
-                    f"🆔 آیدی: `{chat_id}`"
-                )
-                await send_message(session, admin_id, full_info)
+            # 🌟 ارسال گزارش کامل به مدیریت
+            full_info = (
+                f"✅ **تکمیل مشخصات کاربر (لید کامل):**\n\n"
+                f"👤 نام: {user_data[chat_id].get('name')}\n"
+                f"📍 شهر و سن: {user_data[chat_id].get('city')}\n"
+                f"📞 شماره: {user_data[chat_id].get('phone')}\n"
+                f"💼 شغل فعلی: {text}\n"
+                f"🆔 آیدی: `{chat_id}`"
+            )
+            await send_message(session, ADMIN_ID, full_info)
 
+            # هدایت کاربر به پرداخت
             payment_text = (
                 f"ممنون {user_data[chat_id].get('name')} عزیز. مشخصات شما با موفقیت ثبت شد. ✅\n\n"
                 f"برای فعال‌سازی حساب و ورود به دوره، مبلغ **۲ میلیون تومان** پیش‌پرداخت را به شماره کارت زیر واریز کنید:\n\n"
@@ -292,27 +263,25 @@ async def handle_update(update, session):
                 return
 
             data = user_data.get(chat_id, {})
-            admin_id = db.get_admin()
-            if admin_id:
-                admin_text = (
-                    f"🔔 **رسید جدید دریافت شد!**\n\n"
-                    f"👤 کاربر: {data.get('name')}\n"
-                    f"📞 تلفن: {data.get('phone')}\n"
-                    f"📍 شهر: {data.get('city')}\n"
-                    f"💼 شغل: {data.get('job')}\n"
-                    f"🆔 آیدی: `{chat_id}`"
-                )
-                await send_message(
-                    session, admin_id, admin_text, get_inline_approval(chat_id)
-                )
-                if file_id:
-                    await send_photo(session, admin_id, file_id)
-                await send_message(
-                    session,
-                    chat_id,
-                    "رسید شما با موفقیت ارسال شد. منتظر تایید مدیریت باشید... ⏳",
-                )
-                user_states[chat_id] = None
+            admin_text = (
+                f"🔔 **رسید جدید دریافت شد!**\n\n"
+                f"👤 کاربر: {data.get('name')}\n"
+                f"📞 تلفن: {data.get('phone')}\n"
+                f"📍 شهر: {data.get('city')}\n"
+                f"💼 شغل فعلی: {data.get('job')}\n"
+                f"🆔 آیدی: `{chat_id}`"
+            )
+            await send_message(
+                session, ADMIN_ID, admin_text, get_inline_approval(chat_id)
+            )
+            if file_id:
+                await send_photo(session, ADMIN_ID, file_id)
+            await send_message(
+                session,
+                chat_id,
+                "رسید شما با موفقیت ارسال شد. منتظر تایید مدیریت باشید... ⏳",
+            )
+            user_states[chat_id] = None
 
         elif state == "W_BROADCAST" and is_admin:
             users = db.get_all_users()
