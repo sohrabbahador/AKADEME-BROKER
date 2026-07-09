@@ -13,6 +13,7 @@ CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجار
 BALE_API_URL = f"https://tapi.bale.ai/bot{TOKEN}"
 DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
 ADMIN_ID = 160513400  # شناسه ثابت مدیریت
+PORT = int(os.environ.get("PORT", 10000))
 
 
 # --- DATABASE LOGIC ---
@@ -29,7 +30,7 @@ class Database:
         )
         self.conn.commit()
 
-    def save_user(self, user_id, name, phone, city, job, exp="حذف شده"):
+    def save_user(self, user_id, name, phone, city, job, exp):
         self.cursor.execute(
             "INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)",
             (user_id, name, phone, city, exp, job),
@@ -77,12 +78,12 @@ async def send_abandoned_lead_alert(session, chat_id, delay=300):
         await asyncio.sleep(delay)
         if chat_id in user_data:
             data = user_data[chat_id]
-            # اگر فرآیند پرداخت شروع نشده باشد یعنی کاربر فرم را رها کرده است
             if user_states.get(chat_id) not in ["W_RECEIPT", None]:
                 abandoned_info = (
                     f"⚠️ **لید رها شده (ثبت‌نام نیمه‌کاره)!**\n\n"
                     f"👤 نام: {data.get('name', 'نامشخص')}\n"
                     f"📍 شهر و سن: {data.get('city', 'نامشخص')}\n"
+                    f"🏢 سابقه املاک: {data.get('exp_pre', 'نامشخص')}\n"
                     f"📞 شماره: {data.get('phone', 'نامشخص')}\n"
                     f"💼 شغل فعلی: {data.get('job', 'نامشخص')}\n\n"
                     f"🛑 کاربر فرآیند ثبت‌نام را رها کرد."
@@ -90,6 +91,20 @@ async def send_abandoned_lead_alert(session, chat_id, delay=300):
                 await send_message(session, ADMIN_ID, abandoned_info)
     except asyncio.CancelledError:
         pass
+
+
+# --- ANTI SLEEP FUNCTION ---
+async def keep_alive():
+    """هر ۴ دقیقه با پینگ کردن سرور محلی مانع از خواب رفتن کد می‌شود"""
+    await asyncio.sleep(10)  # کمی صبر برای بالا آمدن کامل سرور
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(f"http://127.0.0.1:{PORT}/") as resp:
+                    pass
+            except Exception:
+                pass
+            await asyncio.sleep(240)
 
 
 # --- KEYBOARDS ---
@@ -195,7 +210,6 @@ async def handle_update(update, session):
             )
             user_data.setdefault(chat_id, {})["phone"] = phone
 
-            # 🌟 شروع تایمر ۵ دقیقه‌ای پس‌زمینه
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
             user_timers[chat_id] = asyncio.create_task(
@@ -211,35 +225,35 @@ async def handle_update(update, session):
 
         elif state == "W_JOB":
             user_data.setdefault(chat_id, {})["job"] = text
+            data = user_data.get(chat_id, {})
 
-            # 🌟 کاربر تمام مراحل را پر کرد؛ پس تایمر لید رها شده لغو می‌شود
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
                 del user_timers[chat_id]
 
-            # 🌟 ذخیره مشخصات کامل در دیتابیس
+            # ذخیره مشخصات به همراه پاسخ سابقه املاک (exp_pre)
             db.save_user(
                 chat_id,
-                user_data[chat_id].get("name"),
-                user_data[chat_id].get("phone"),
-                user_data[chat_id].get("city"),
+                data.get("name"),
+                data.get("phone"),
+                data.get("city"),
                 text,
+                data.get("exp_pre"),
             )
 
-            # 🌟 ارسال گزارش کامل به مدیریت
             full_info = (
                 f"✅ **تکمیل مشخصات کاربر (لید کامل):**\n\n"
-                f"👤 نام: {user_data[chat_id].get('name')}\n"
-                f"📍 شهر و سن: {user_data[chat_id].get('city')}\n"
-                f"📞 شماره: {user_data[chat_id].get('phone')}\n"
+                f"👤 نام: {data.get('name')}\n"
+                f"📍 شهر و سن: {data.get('city')}\n"
+                f"🏢 سابقه املاک: {data.get('exp_pre')}\n"
+                f"📞 شماره: {data.get('phone')}\n"
                 f"💼 شغل فعلی: {text}\n"
                 f"🆔 آیدی: `{chat_id}`"
             )
             await send_message(session, ADMIN_ID, full_info)
 
-            # هدایت کاربر به پرداخت
             payment_text = (
-                f"ممنون {user_data[chat_id].get('name')} عزیز. مشخصات شما با موفقیت ثبت شد. ✅\n\n"
+                f"ممنون {data.get('name')} عزیز. مشخصات شما با موفقیت ثبت شد. ✅\n\n"
                 f"برای فعال‌سازی حساب و ورود به دوره، مبلغ **۲ میلیون تومان** پیش‌پرداخت را به شماره کارت زیر واریز کنید:\n\n"
                 f"💳 `{CARD_NUMBER}`\n\n"
                 f"پس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید."
@@ -268,6 +282,7 @@ async def handle_update(update, session):
                 f"👤 کاربر: {data.get('name')}\n"
                 f"📞 تلفن: {data.get('phone')}\n"
                 f"📍 شهر: {data.get('city')}\n"
+                f"🏢 سابقه املاک: {data.get('exp_pre')}\n"
                 f"💼 شغل فعلی: {data.get('job')}\n"
                 f"🆔 آیدی: `{chat_id}`"
             )
@@ -342,9 +357,11 @@ async def main():
     app.router.add_get("/", handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
+
+    # فعال‌سازی تسک ضد خواب سرور
+    asyncio.create_task(keep_alive())
 
     async with aiohttp.ClientSession() as session:
         offset = 0
