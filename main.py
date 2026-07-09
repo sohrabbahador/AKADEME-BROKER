@@ -145,6 +145,7 @@ async def handle_update(update, session):
             user_data[chat_id]["city"] = text
             await send_message(session, chat_id, "سابقه فعالیت در املاک داشته‌اید؟:\n(خیر / بله) 👇")
             user_states[chat_id] = "W_EXP"
+            
         elif state == "W_EXP":
             user_data[chat_id]["exp"] = text
             await send_message(session, chat_id, "لطفاً شماره تماس خود را ارسال کنید: 👇", get_contact_keyboard())
@@ -153,27 +154,27 @@ async def handle_update(update, session):
         elif state == "W_PHONE":
             phone = ""
             if "contact" in message:
-            phone = message["contact"].get("phone_number", "")
+                phone = message["contact"].get("phone_number", "")
             else:
-            phone = text
-‌
+                phone = text
+
             user_data[chat_id]["phone"] = phone
-‌
+
             # ذخیره سریع در دیتابیس
             db.save_user(
-            chat_id,
-            user_data[chat_id].get('name', 'نامعلوم'),
-            phone,
-            user_data[chat_id].get('city', 'نامعلوم'),
-            user_data[chat_id].get('exp', 'نامعلوم'),
-            "در حال تکمیل..."
+                chat_id,
+                user_data[chat_id].get('name', 'نامعلوم'),
+                phone,
+                user_data[chat_id].get('city', 'نامعلوم'),
+                user_data[chat_id].get('exp', 'نامعلوم'),
+                "در حال تکمیل..."
             )
-‌
+
             # ارسال پیام برای ادمین (هر کسی که فعلاً ادمین است)
             admin_id = db.get_admin()
             if admin_id:
-            await send_message(session, admin_id, f"⚡️ لید جدید!\nکاربر {user_data[chat_id].get('name')} شماره {phone} را ارسال کرد و در حال تکمیل فرم است.")
-‌
+                await send_message(session, admin_id, f"⚡️ لید جدید!\nکاربر {user_data[chat_id].get('name')} شماره {phone} را ارسال کرد و در حال تکمیل فرم است.")
+
             await send_message(session, chat_id, "ممنون. در حال حاضر مشغول چه کاری هستید؟ (شغل فعلی خود را بنویسید) 👇")
             user_states[chat_id] = "W_JOB"
             
@@ -295,4 +296,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
