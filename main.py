@@ -53,11 +53,6 @@ class Database:
         self.cursor.execute("SELECT COUNT(*) FROM users WHERE created_at LIKE ?", (f"{today}%",))
         return self.cursor.fetchone()[0]
 
-    def get_user_name(self, user_id):
-        self.cursor.execute("SELECT name FROM users WHERE user_id=?", (user_id,))
-        row = self.cursor.fetchone()
-        return row[0] if row and row[0] else "کاربر"
-
 db = Database(DB_PATH)
 user_states = {}
 user_data = {}
@@ -87,19 +82,16 @@ def get_inline_approval(user_id):
     return {"inline_keyboard": [[{"text": "✅ تایید", "callback_data": f"app_{user_id}"}, {"text": "❌ رد", "callback_data": f"rej_{user_id}"}]]}
 
 # --- SCHEDULED TASKS ---
-async def daily_report():
-    async with aiohttp.ClientSession() as session:
-        total = db.get_total_users()
-        new_today = db.get_new_users_today()
-        await send_message(session, ADMIN_ID, f"📊 **گزارش شبانه مدیریت**\n\n👥 کل کاربران: {total}\n✨ کاربران جدید امروز: {new_today}")
+async def daily_report(session):
+    total = db.get_total_users()
+    new_today = db.get_new_users_today()
+    await send_message(session, ADMIN_ID, f"📊 **گزارش شبانه مدیریت**\n\n👥 کل کاربران: {total}\n✨ کاربران جدید امروز: {new_today}")
 
-async def follow_up_reminders():
+async def follow_up_reminders(session):
     # پیامی برای کاربرانی که در مرحله پرداخت هستند و هنوز تایید نشده‌اند
-    async with aiohttp.ClientSession() as session:
-        for uid, state in list(user_states.items()):
-            if state == "W_RECEIPT":
-                user_name = db.get_user_name(uid)
-                await send_message(session, uid, f"🔔 یادآوری: {user_name} عزیز، منتظر ارسال رسید شما هستیم تا پذیرش شما را نهایی کنیم. ⏳")
+    for uid, state in list(user_states.items()):
+        if state == "W_RECEIPT":
+            await send_message(session, uid, "🔔 یادآوری: سهراب عزیز، منتظر ارسال رسید شما هستیم تا پذیرش شما را نهایی کنیم. ⏳")
 
 # --- LEAD ABANDONMENT ---
 async def send_abandoned_lead_alert(session, chat_id, delay=300):
@@ -229,20 +221,20 @@ async def start_app():
     
     # Scheduler setup
     scheduler = AsyncIOScheduler()
-    # ۴. گزارش روزانه ساعت ۱۲ شب
-    scheduler.add_job(daily_report, 'cron', hour=0, minute=0)
-    # ۳. پیگیری خودکار هر ۲۴ ساعت
-    scheduler.add_job(follow_up_reminders, 'interval', hours=24)
-    scheduler.start()
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", PORT)
-    await site.start()
-    print(f"Bot started on port {PORT}")
-    
-    while True: 
-        await asyncio.sleep(3600)
+    async with aiohttp.ClientSession() as session:
+        # ۴. گزارش روزانه ساعت ۱۲ شب
+        scheduler.add_job(lambda: daily_report(session), 'cron', hour=0, minute=0)
+        # ۳. پیگیری خودکار هر ۲۴ ساعت
+        scheduler.add_job(lambda: follow_up_reminders(session), 'interval', hours=24)
+        scheduler.start()
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", PORT)
+        await site.start()
+        print(f"Bot started on port {PORT}")
+        while True: 
+            await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(start_app())
