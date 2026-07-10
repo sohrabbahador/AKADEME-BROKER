@@ -146,7 +146,7 @@ async def keep_alive():
 
 # --- KEYBOARDS ---
 def get_main_menu():
-    return {"keyboard": [[{"text": "📋 ثبت درخواست"}]], "resize_keyboard": True}
+    return {"keyboard": [[{"text": "📋 ثبت درخواست"}]], "resize_keyboard": True, "one_time_keyboard": True}
 
 
 def get_admin_menu():
@@ -165,6 +165,20 @@ def get_contact_keyboard():
         "resize_keyboard": True,
         "one_time_keyboard": True,
     }
+
+
+def get_experience_keyboard():
+    return {
+        "keyboard": [
+            [{"text": "🟩بله، داشته‌ام"}, {"text": "🟥خیر، نداشته‌ام"}]
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": True,
+    }
+
+
+def get_remove_keyboard():
+    return {"remove_keyboard": True}
 
 
 def get_inline_approval(user_id):
@@ -205,6 +219,7 @@ async def handle_update(update, session):
                 session,
                 chat_id,
                 "خوشحالیم که با ما همراه شدید. 🚀\nلطفاً نام و نام خانوادگی کامل خود را وارد کنید: 👇",
+                get_remove_keyboard()
             )
             user_states[chat_id] = "W_NAME"
             user_data[chat_id] = {}
@@ -226,7 +241,8 @@ async def handle_update(update, session):
             await send_message(
                 session,
                 chat_id,
-                "سابقه فعالیت در املاک داشته‌اید؟:\n(خیر / بله) 👇",
+                "سابقه فعالیت در املاک داشته‌اید؟ 👇",
+                get_experience_keyboard()
             )
             user_states[chat_id] = "W_EXP_PRE"
 
@@ -259,6 +275,7 @@ async def handle_update(update, session):
                 session,
                 chat_id,
                 "ممنون. در حال حاضر مشغول چه کاری هستید? (شغل فعلی خود را بنویسید) 👇",
+                get_remove_keyboard()
             )
             user_states[chat_id] = "W_JOB"
 
