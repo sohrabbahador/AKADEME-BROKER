@@ -18,7 +18,6 @@ PORT = int(os.environ.get("PORT", 10000))
 
 # --- DATABASE LOGIC ---
 class Database:
-
     def __init__(self, db_file):
         self.conn = sqlite3.connect(db_file)
         self.cursor = self.conn.cursor()
@@ -96,7 +95,7 @@ async def send_abandoned_lead_alert(session, chat_id, delay=300):
 # --- ANTI SLEEP FUNCTION ---
 async def keep_alive():
     """هر ۴ دقیقه با پینگ کردن سرور محلی مانع از خواب رفتن کد می‌شود"""
-    await asyncio.sleep(10)  # کمی صبر برای بالا آمدن کامل سرور
+    await asyncio.sleep(10)
     async with aiohttp.ClientSession() as session:
         while True:
             try:
@@ -145,8 +144,7 @@ async def handle_update(update, session):
         message = update["message"]
         chat_id = message["chat"]["id"]
         text = message.get("text", "")
-
-        is_admin = chat_id == ADMIN_ID
+        is_admin = (chat_id == ADMIN_ID)
 
         if text == "/start":
             if chat_id in user_timers:
@@ -157,7 +155,10 @@ async def handle_update(update, session):
                 f"به آکادمی املاک «حرفه‌ای شو» خوش آمدید.\n\n"
                 f"برای شروع مراحل پذیرش و ثبت درخواست، روی دکمه زیر کلیک کنید 👇"
             )
-            await send_message(session, chat_id, welcome, get_main_menu())
+            if is_admin:
+                await send_message(session, chat_id, welcome, get_admin_menu())
+            else:
+                await send_message(session, chat_id, welcome, get_main_menu())
             return
 
         if text == "📋 ثبت درخواست":
@@ -212,6 +213,7 @@ async def handle_update(update, session):
 
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
+
             user_timers[chat_id] = asyncio.create_task(
                 send_abandoned_lead_alert(session, chat_id, delay=300)
             )
@@ -231,13 +233,12 @@ async def handle_update(update, session):
                 user_timers[chat_id].cancel()
                 del user_timers[chat_id]
 
-            # ذخیره مشخصات به همراه پاسخ سابقه املاک (exp_pre)
             db.save_user(
                 chat_id,
                 data.get("name"),
                 data.get("phone"),
                 data.get("city"),
-                text,
+                text, 
                 data.get("exp_pre"),
             )
 
@@ -360,7 +361,6 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    # فعال‌سازی تسک ضد خواب سرور
     asyncio.create_task(keep_alive())
 
     async with aiohttp.ClientSession() as session:
