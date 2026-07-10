@@ -2,11 +2,14 @@ import asyncio
 import logging
 import os
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import aiohttp
 from aiohttp import web
 from apscheduler import AsyncIOScheduler
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 TOKEN = os.environ.get(
@@ -14,7 +17,7 @@ TOKEN = os.environ.get(
 ).strip()
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = f"https://tapi.bale.ai/bot{TOKEN}"
-DB_PATH = "/data/bot_database.db" if os.path.exists("/data") else "bot_database.db"
+DB_PATH = "bot_database.db"
 ADMIN_ID = 160513400
 FINAL_LINK = "https://t.me/your_link_here"
 PORT = int(os.environ.get("PORT", 10000))
@@ -24,9 +27,12 @@ PORT = int(os.environ.get("PORT", 10000))
 class Database:
 
     def __init__(self, db_file):
-        self.conn = sqlite3.connect(db_file, check_same_thread=False)
-        self.cursor = self.conn.cursor()
-        self.create_tables()
+        try:
+            self.conn = sqlite3.connect(db_file, check_same_thread=False)
+            self.cursor = self.conn.cursor()
+            self.create_tables()
+        except Exception as e:
+            logger.error(f"Database Connection Error: {e}")
 
     def create_tables(self):
         self.cursor.execute(
@@ -35,18 +41,24 @@ class Database:
         self.conn.commit()
 
     def add_user(self, user_id, name=""):
-        self.cursor.execute(
-            "INSERT OR IGNORE INTO users (user_id, name) VALUES (?, ?)",
-            (user_id, name),
-        )
-        self.conn.commit()
+        try:
+            self.cursor.execute(
+                "INSERT OR IGNORE INTO users (user_id, name) VALUES (?, ?)",
+                (user_id, name),
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"DB Add User Error: {e}")
 
     def save_user_details(self, user_id, name, phone, city, job, exp):
-        self.cursor.execute(
-            "UPDATE users SET name=?, phone=?, city=?, experience=?, job=? WHERE user_id=?",
-            (name, phone, city, exp, job, user_id),
-        )
-        self.conn.commit()
+        try:
+            self.cursor.execute(
+                "UPDATE users SET name=?, phone=?, city=?, experience=?, job=? WHERE user_id=?",
+                (name, phone, city, exp, job, user_id),
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"DB Save Error: {e}")
 
     def get_all_users(self):
         self.cursor.execute("SELECT user_id FROM users")
@@ -78,9 +90,14 @@ async def send_message(session, chat_id, text, reply_markup=None):
         payload["reply_markup"] = reply_markup
     try:
         async with session.post(url, json=payload) as resp:
-            return await resp.json()
+            result = await resp.json()
+            if not result.get("ok"):
+                logger.error(
+                    f"Bale API Error (sendMessage): {result.get('description')} | ChatID: {chat_id}"
+                )
+            return result
     except Exception as e:
-        print(f"Error sending message to {chat_id}: {e}")
+        logger.error(f"Request Error (sendMessage): {e}")
 
 
 async def send_photo(session, chat_id, file_id, caption=""):
@@ -88,9 +105,14 @@ async def send_photo(session, chat_id, file_id, caption=""):
     payload = {"chat_id": chat_id, "photo": file_id, "caption": caption}
     try:
         async with session.post(url, json=payload) as resp:
-            return await resp.json()
+            result = await resp.json()
+            if not result.get("ok"):
+                logger.error(
+                    f"Bale API Error (sendPhoto): {result.get('description')}"
+                )
+            return result
     except Exception as e:
-        print(f"Error sending photo to {chat_id}: {e}")
+        logger.error(f"Request Error (sendPhoto): {e}")
 
 
 # --- KEYBOARDS ---
@@ -197,7 +219,7 @@ async def handle_update(update, session):
                 )
                 await send_message(session, user_id, f"❌ کاربر {target_user} رد شد.")
         except Exception as e:
-            print(f"Callback error: {e}")
+            logger.error(f"Callback error: {e}")
         return
 
     if "message" not in update:
@@ -357,7 +379,7 @@ async def main():
                                 await handle_update(update, session)
                                 offset = update["update_id"] + 1
             except Exception as e:
-                print(f"Polling error: {e}")
+                logger.error(f"Polling error: {e}")
             await asyncio.sleep(1)
 
 
