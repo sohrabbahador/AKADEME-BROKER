@@ -2,10 +2,11 @@ import asyncio
 import logging
 import os
 import sqlite3
-import aiohttp
 from datetime import datetime, timedelta
-from apscheduler import AsyncIOScheduler
+
+import aiohttp
 from aiohttp import web
+from apscheduler import AsyncIOScheduler
 
 # --- CONFIGURATION ---
 TOKEN = os.environ.get(
@@ -18,8 +19,10 @@ ADMIN_ID = 160513400
 FINAL_LINK = "https://t.me/your_link_here"
 PORT = int(os.environ.get("PORT", 10000))
 
+
 # --- DATABASE LOGIC ---
 class Database:
+
     def __init__(self, db_file):
         self.conn = sqlite3.connect(db_file, check_same_thread=False)
         self.cursor = self.conn.cursor()
@@ -27,15 +30,7 @@ class Database:
 
     def create_tables(self):
         self.cursor.execute(
-            """CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY, 
-                name TEXT, 
-                phone TEXT, 
-                city TEXT, 
-                experience TEXT, 
-                job TEXT, 
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )"""
+            "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT, phone TEXT, city TEXT, experience TEXT, job TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
         )
         self.conn.commit()
 
@@ -48,9 +43,7 @@ class Database:
 
     def save_user_details(self, user_id, name, phone, city, job, exp):
         self.cursor.execute(
-            """UPDATE users 
-               SET name=?, phone=?, city=?, experience=?, job=? 
-               WHERE user_id=?""",
+            "UPDATE users SET name=?, phone=?, city=?, experience=?, job=? WHERE user_id=?",
             (name, phone, city, exp, job, user_id),
         )
         self.conn.commit()
@@ -87,7 +80,7 @@ async def send_message(session, chat_id, text, reply_markup=None):
         async with session.post(url, json=payload) as resp:
             return await resp.json()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error sending message to {chat_id}: {e}")
 
 
 async def send_photo(session, chat_id, file_id, caption=""):
@@ -97,7 +90,7 @@ async def send_photo(session, chat_id, file_id, caption=""):
         async with session.post(url, json=payload) as resp:
             return await resp.json()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error sending photo to {chat_id}: {e}")
 
 
 # --- KEYBOARDS ---
@@ -139,12 +132,7 @@ async def send_abandoned_lead_alert(session, chat_id, delay=300):
             None,
         ]:
             data = user_data[chat_id]
-            msg = (
-                f"⚠️ **لید رها شده!**\n\n"
-                f"👤 نام: {data.get('name')}\n"
-                f"📞 شماره: {data.get('phone')}\n"
-                f"🆔 آیدی: `{chat_id}`"
-            )
+            msg = f"⚠️ **لید رها شده!**\n\n👤 نام: {data.get('name')}\n📞 شماره: {data.get('phone')}\n🆔 آیدی: `{chat_id}`"
             await send_message(session, ADMIN_ID, msg)
     except asyncio.CancelledError:
         pass
@@ -153,20 +141,22 @@ async def send_abandoned_lead_alert(session, chat_id, delay=300):
 async def daily_report(session):
     total = db.get_total_users()
     new_today = db.get_new_users_today()
-    msg = (
-        f"📊 **گزارش شبانه مدیریت**\n\n"
-        f"👥 کل کاربران: {total}\n"
-        f"✨ کاربران جدید امروز: {new_today}"
+    await send_message(
+        session,
+        ADMIN_ID,
+        f"📊 **گزارش شبانه مدیریت**\n\n👥 کل کاربران: {total}\n✨ کاربران جدید امروز: {new_today}",
     )
-    await send_message(session, ADMIN_ID, msg)
 
 
 async def follow_up_reminders(session):
     for uid, state in list(user_states.items()):
         if state == "W_RECEIPT":
             user_name = user_data.get(uid, {}).get("name", "دوست عزیز")
-            msg = f"🔔 یادآوری: {user_name} عزیز، منتظر ارسال رسید شما هستیم تا پذیرش شما را نهایی کنیم. ⏳"
-            await send_message(session, uid, msg)
+            await send_message(
+                session,
+                uid,
+                f"🔔 یادآوری: {user_name} عزیز، منتظر ارسال رسید شما هستیم تا پذیرش شما را نهایی کنیم. ⏳",
+            )
 
 
 async def keep_alive():
@@ -188,22 +178,26 @@ async def handle_update(update, session):
         cb = update["callback_query"]
         q_data = cb["data"]
         user_id = cb["from"]["id"]
-        target_user = int(q_data.split("_")[1])
-
-        if q_data.startswith("app_"):
-            await send_message(
-                session,
-                target_user,
-                f"🎉 پرداخت تایید شد! خوش آمدید.\n\nلینک دسترسی شما: {FINAL_LINK}",
-            )
-            await send_message(session, user_id, f"✅ کاربر {target_user} تایید شد و لینک ارسال شد.")
-        elif q_data.startswith("rej_"):
-            await send_message(
-                session,
-                target_user,
-                "متأسفیم، پرداخت تایید نشد. لطفا مجدد رسید را بفرستید.",
-            )
-            await send_message(session, user_id, f"❌ کاربر {target_user} رد شد.")
+        try:
+            target_user = int(q_data.split("_")[1])
+            if q_data.startswith("app_"):
+                await send_message(
+                    session,
+                    target_user,
+                    f"🎉 پرداخت تایید شد! خوش آمدید.\n\nلینک دسترسی شما: {FINAL_LINK}",
+                )
+                await send_message(
+                    session, user_id, f"✅ کاربر {target_user} تایید شد و لینک ارسال شد."
+                )
+            elif q_data.startswith("rej_"):
+                await send_message(
+                    session,
+                    target_user,
+                    "متأسفیم، پرداخت تایید نشد. لطفا مجدد رسید را بفرستید.",
+                )
+                await send_message(session, user_id, f"❌ کاربر {target_user} رد شد.")
+        except Exception as e:
+            print(f"Callback error: {e}")
         return
 
     if "message" not in update:
@@ -224,8 +218,12 @@ async def handle_update(update, session):
             user_timers[chat_id].cancel()
         user_states[chat_id] = None
         welcome_text = "سلام و خوش آمدید! 🌟\nبه آکادمی املاک «حرفه‌ای شو» خوش آمدید."
-        menu = get_admin_menu() if chat_id == ADMIN_ID else get_main_menu()
-        await send_message(session, chat_id, welcome_text, menu)
+        await send_message(
+            session,
+            chat_id,
+            welcome_text,
+            get_admin_menu() if chat_id == ADMIN_ID else get_main_menu(),
+        )
         return
 
     if text == "📋 ثبت درخواست":
@@ -233,7 +231,9 @@ async def handle_update(update, session):
             user_timers[chat_id].cancel()
         user_states[chat_id] = "W_NAME"
         user_data[chat_id] = {}
-        await send_message(session, chat_id, "👤 لطفا نام و نام خانوادگی خود را وارد کنید:")
+        await send_message(
+            session, chat_id, "👤 لطفا نام و نام خانوادگی خود را وارد کنید:"
+        )
         return
 
     state = user_states.get(chat_id)
@@ -282,12 +282,7 @@ async def handle_update(update, session):
             user_data[user_id]["exp"],
         )
         user_states[user_id] = "W_RECEIPT"
-        msg_pay = (
-            f"ممنون {user_data[user_id]['name']} عزیز. مشخصات ثبت شد. ✅\n\n"
-            f"برای فعال‌سازی، مبلغ **۲ میلیون تومان** را به کارت زیر واریز کنید:\n\n"
-            f"💳 `{CARD_NUMBER}`\n\n"
-            f"سپس عکس رسید را ارسال کنید."
-        )
+        msg_pay = f"ممنون {user_data[user_id]['name']} عزیز. مشخصات ثبت شد. ✅\n\nبرای فعال‌سازی، مبلغ **۲ میلیون تومان** را به کارت زیر واریز کنید:\n\n💳 `{CARD_NUMBER}`\n\nسپس عکس رسید را ارسال کنید."
         await send_message(session, user_id, msg_pay)
         user_timers[user_id] = asyncio.create_task(
             send_abandoned_lead_alert(session, user_id)
@@ -310,7 +305,9 @@ async def handle_update(update, session):
 
     if user_id == ADMIN_ID:
         if text == "👥 لیست کاربران":
-            await send_message(session, user_id, f"تعداد کل کاربران: {db.get_total_users()} نفر")
+            await send_message(
+                session, user_id, f"تعداد کل کاربران: {db.get_total_users()} نفر"
+            )
             return
         if text == "📢 ارسال پیام گروهی":
             user_states[user_id] = "W_BROADCAST"
