@@ -121,7 +121,8 @@ async def send_daily_report(session):
                 f"🆕 ثبت‌نام‌های امروز: {daily} نفر"
             )
             await send_message(session, ADMIN_ID, report)
-        await asyncio.sleep(60)
+            await asyncio.sleep(60)
+        await asyncio.sleep(30) # جلوگیری از مصرف زیاد CPU
 
 
 async def keep_alive():
@@ -165,7 +166,7 @@ async def handle_update(update, session):
         message = update["message"]
         chat_id = message["chat"]["id"]
         text = message.get("text", "")
-        is_admin = chat_id == ADMIN_ID
+        is_admin = (chat_id == ADMIN_ID)
 
         if text == "/start":
             db.register_initial_user(chat_id)
@@ -176,7 +177,11 @@ async def handle_update(update, session):
             welcome = (f"سلام {message['from'].get('first_name', 'عزیز')} عزیز! 🌟\n"
                        f"به آکادمی املاک «حرفه‌ای شو» خوش آمدید.\n\n"
                        f"برای شروع مراحل پذیرش و ثبت درخواست، روی دکمه زیر کلیک کنید 👇")
-            await send_message(session, chat_id, welcome, get_main_menu())
+            
+            if is_admin:
+                await send_message(session, chat_id, welcome, get_admin_menu())
+            else:
+                await send_message(session, chat_id, welcome, get_main_menu())
             return
 
         if text == "📋 ثبت درخواست":
@@ -213,8 +218,11 @@ async def handle_update(update, session):
             data = user_data.get(chat_id, {})
             if chat_id in user_timers:
                 user_timers[chat_id].cancel()
-                del user_timers[chat_id]
+                if chat_id in user_timers: del user_timers[chat_id]
+            
+            # ذخیره در دیتابیس
             db.save_user(chat_id, data.get("name"), data.get("phone"), data.get("city"), text, data.get("exp_pre"))
+            
             full_info = (f"✅ **تکمیل مشخصات کاربر (لید کامل):**\n\n👤 نام: {data.get('name')}\n📍 شهر و سن: {data.get('city')}\n🏢 سابقه املاک: {data.get('exp_pre')}\n📞 شماره: {data.get('phone')}\n💼 شغل فعلی: {text}\n🆔 آیدی: `{chat_id}`")
             await send_message(session, ADMIN_ID, full_info)
             payment_text = (f"ممنون {data.get('name')} عزیز. مشخصات شما با موفقیت ثبت شد. ✅\n\nبرای فعال‌سازی حساب و ورود به دوره، مبلغ **۲ میلیون تومان** پیش‌پذیرش را به شماره کارت زیر واریز کنید:\n\n💳 `{CARD_NUMBER}`\n\nپس از واریز، لطفاً **عکس رسید** را همین‌جا ارسال کنید.")
@@ -242,6 +250,7 @@ async def handle_update(update, session):
             await send_message(session, chat_id, f"پیام شما برای {count} کاربر ارسال شد. ✅")
             user_states[chat_id] = None
 
+        # مدیریت دکمه‌های ادمین
         if is_admin:
             if text == "📢 ارسال پیام گروهی":
                 await send_message(session, chat_id, "پیام خود را بفرستید تا برای همه کاربران ارسال شود: 👇")
@@ -300,7 +309,7 @@ async def main():
                                 offset = update["update_id"] + 1
             except Exception as e:
                 print(f"Polling error: {e}")
-            await asyncio.sleep(1)
+                await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
