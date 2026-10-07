@@ -12,7 +12,7 @@ TOKEN = os.environ.get(
 ).strip()
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "5859831081169756 (بانک تجارت)")
 BALE_API_URL = f"https://tapi.bale.ai/bot{TOKEN}"
-MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://your_username:your_password@cluster0.mongodb.net/?retryWrites=true&w=majority")
+MONGO_URL = "mongodb+srv://your_username:your_password@cluster0.mongodb.net/?retryWrites=true&w=majority"
 ADMIN_ID = 160513400  # شناسه ثابت مدیریت
 PORT = int(os.environ.get("PORT", 10000))
 
